@@ -1,0 +1,3 @@
+# Detect changes by polling the Catalog's Metadata Pointers
+
+With about 500 Tables, each committing roughly every 10 minutes and some every few minutes, reloading every Table on a timer wastes most of its work. Instead, the Collection Loop runs one query against the JDBC Catalog's PostgreSQL table every few seconds to read the Metadata Pointer of every Table, and reloads only the Tables whose pointer has moved. This couples us to the JDBC catalog's internal table layout (the `iceberg_tables` table and its `metadata_location` column). We accept that, because the alternative of listing and loading every Table through the catalog API costs about 500 loads per cycle.

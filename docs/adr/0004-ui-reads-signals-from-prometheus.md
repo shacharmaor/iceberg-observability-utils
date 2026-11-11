@@ -1,0 +1,3 @@
+# The UI reads Signals from Prometheus, not from the Collector
+
+The UI and the external monitoring system must never disagree about a Table. So the UI Backend never calls the Collector. It queries the same Prometheus that scrapes the Collector and that the external monitoring reads, which makes Prometheus the single source of truth for current values and history. Reading the Collector's `/metrics` directly would show values from a different moment than the stored scrape, so the two views would drift around every commit. The cost is that the UI depends on Prometheus availability and is only as fresh as the scrape interval. Findings are computed in the UI Backend and never written back to Prometheus.
