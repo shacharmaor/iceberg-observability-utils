@@ -1,7 +1,13 @@
+PY_PROJECTS := collector ui-backend
+
 .PHONY: lint test
 
 lint:
-	cd collector && uv run ruff check . && uv run ruff format --check .
+	@for p in $(PY_PROJECTS); do \
+		(cd $$p && uv run ruff check . && uv run ruff format --check .) || exit 1; \
+	done
 
 test:
-	cd collector && uv run pytest -q
+	@for p in $(PY_PROJECTS); do \
+		(cd $$p && uv run pytest -q) || exit 1; \
+	done
