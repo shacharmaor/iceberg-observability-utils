@@ -1,0 +1,14 @@
+# Served by nginxinc/nginx-unprivileged (port 8080, arbitrary UID, OpenShift restricted SCC).
+# ICEOBS_UI_BACKEND_URL is substituted by the image's envsubst templating, e.g. http://ui-backend:8000
+server {
+  listen 8080;
+  root /usr/share/nginx/html;
+
+  location /api/ {
+    proxy_pass ${ICEOBS_UI_BACKEND_URL};
+  }
+
+  location / {
+    try_files $uri /index.html;
+  }
+}

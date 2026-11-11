@@ -17,9 +17,17 @@ class PrometheusClient(Protocol):
 
 
 class HttpPrometheusClient:
-    def __init__(self, url: str, token: str | None = None, timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        url: str,
+        token: str | None = None,
+        timeout: float = 10.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
-        self._http = httpx.Client(base_url=url, headers=headers, timeout=timeout)
+        self._http = httpx.Client(
+            base_url=url, headers=headers, timeout=timeout, transport=transport
+        )
 
     def instant_query(self, query: str) -> list[Sample]:
         response = self._http.get("/api/v1/query", params={"query": query})
