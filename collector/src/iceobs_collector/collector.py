@@ -1,20 +1,22 @@
 """The Collector: reads the Catalog, computes Signals, exports them on /metrics."""
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Gauge, generate_latest
 from pyiceberg.catalog.sql import SqlCatalog
 
-from iceobs_collector.poller import poll_pointers
+from iceobs_collector.poller import diff_pointers, poll_pointers
 from iceobs_collector.settings import Settings
 from iceobs_collector.signals import REGISTRY, read_metadata
 
 
 class Collector:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, catalog: SqlCatalog | None = None) -> None:
         self._settings = settings
-        self._catalog = SqlCatalog(settings.catalog_name, uri=settings.catalog_uri)
+        self.catalog = catalog or SqlCatalog(settings.catalog_name, uri=settings.catalog_uri)
+        self._last_seen: dict[tuple[str, str], str] = {}
         self._registry = CollectorRegistry()
         self._signals = [s for s in REGISTRY.values() if s.name not in settings.disabled_signals]
         self._gauges = {
@@ -28,13 +30,23 @@ class Collector:
         }
 
     def run_cycle(self) -> None:
-        for pointer in poll_pointers(self._settings.catalog_uri, self._settings.catalog_name):
-            table = self._catalog.load_table((pointer.namespace, pointer.table))
-            metadata = read_metadata(table, self._signals)
-            for signal in self._signals:
-                self._gauges[signal.name].labels(pointer.namespace, pointer.table).set(
-                    signal.compute(metadata)
-                )
+        pointers = poll_pointers(self._settings.catalog_uri, self._settings.catalog_name)
+        diff = diff_pointers(self._last_seen, pointers)
+        for namespace, table in diff.removed:
+            for gauge in self._gauges.values():
+                gauge.remove(namespace, table)
+            del self._last_seen[(namespace, table)]
+        locations = {(p.namespace, p.table): p.metadata_location for p in pointers}
+        with ThreadPoolExecutor(max_workers=self._settings.load_concurrency) as pool:
+            list(pool.map(self._reload, sorted(diff.to_reload)))
+        for key in diff.to_reload:
+            self._last_seen[key] = locations[key]
+
+    def _reload(self, key: tuple[str, str]) -> None:
+        table = self.catalog.load_table(key)
+        metadata = read_metadata(table, self._signals)
+        for signal in self._signals:
+            self._gauges[signal.name].labels(*key).set(signal.compute(metadata))
 
     def metrics_text(self) -> str:
         return generate_latest(self._registry).decode()

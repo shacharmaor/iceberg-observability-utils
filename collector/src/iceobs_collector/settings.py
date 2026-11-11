@@ -8,6 +8,7 @@ from iceobs_collector.signals import REGISTRY
 DEFAULT_CATALOG_NAME = "default"
 DEFAULT_POLL_INTERVAL_SECONDS = 30
 DEFAULT_HTTP_PORT = 8080
+DEFAULT_LOAD_CONCURRENCY = 4
 
 
 class SettingsError(ValueError):
@@ -33,6 +34,7 @@ class Settings:
     catalog_name: str = DEFAULT_CATALOG_NAME
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
     http_port: int = DEFAULT_HTTP_PORT
+    load_concurrency: int = DEFAULT_LOAD_CONCURRENCY
     disabled_signals: frozenset[str] = frozenset()
 
     @classmethod
@@ -58,5 +60,8 @@ class Settings:
                 env, "ICEOBS_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
             ),
             http_port=_positive_int(env, "ICEOBS_HTTP_PORT", DEFAULT_HTTP_PORT),
+            load_concurrency=_positive_int(
+                env, "ICEOBS_LOAD_CONCURRENCY", DEFAULT_LOAD_CONCURRENCY
+            ),
             disabled_signals=disabled,
         )
