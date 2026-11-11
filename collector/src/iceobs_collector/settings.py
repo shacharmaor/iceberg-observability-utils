@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from iceobs_collector.signals import REGISTRY
+
 DEFAULT_CATALOG_NAME = "default"
 DEFAULT_POLL_INTERVAL_SECONDS = 30
 DEFAULT_HTTP_PORT = 8080
@@ -31,12 +33,24 @@ class Settings:
     catalog_name: str = DEFAULT_CATALOG_NAME
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
     http_port: int = DEFAULT_HTTP_PORT
+    disabled_signals: frozenset[str] = frozenset()
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
         catalog_uri = env.get("ICEOBS_CATALOG_URI")
         if not catalog_uri:
             raise SettingsError("ICEOBS_CATALOG_URI is required (JDBC Catalog database URI)")
+        disabled = frozenset(
+            name.strip()
+            for name in env.get("ICEOBS_DISABLED_SIGNALS", "").split(",")
+            if name.strip()
+        )
+        unknown = sorted(disabled - REGISTRY.keys())
+        if unknown:
+            raise SettingsError(
+                f"ICEOBS_DISABLED_SIGNALS names unknown Signal(s) {unknown}; "
+                f"known Signals: {sorted(REGISTRY)}"
+            )
         return cls(
             catalog_uri=catalog_uri,
             catalog_name=env.get("ICEOBS_CATALOG_NAME", DEFAULT_CATALOG_NAME),
@@ -44,4 +58,5 @@ class Settings:
                 env, "ICEOBS_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
             ),
             http_port=_positive_int(env, "ICEOBS_HTTP_PORT", DEFAULT_HTTP_PORT),
+            disabled_signals=disabled,
         )

@@ -8,7 +8,7 @@ from pyiceberg.catalog.sql import SqlCatalog
 
 from iceobs_collector.poller import poll_pointers
 from iceobs_collector.settings import Settings
-from iceobs_collector.signals import data_file_count
+from iceobs_collector.signals import REGISTRY, read_metadata
 
 
 class Collector:
@@ -16,17 +16,25 @@ class Collector:
         self._settings = settings
         self._catalog = SqlCatalog(settings.catalog_name, uri=settings.catalog_uri)
         self._registry = CollectorRegistry()
-        self._data_files = Gauge(
-            "iceobs_data_files",
-            "Number of data files in the Table's current snapshot",
-            ["namespace", "table"],
-            registry=self._registry,
-        )
+        self._signals = [s for s in REGISTRY.values() if s.name not in settings.disabled_signals]
+        self._gauges = {
+            signal.name: Gauge(
+                signal.metric_name,
+                signal.description,
+                ["namespace", "table"],
+                registry=self._registry,
+            )
+            for signal in self._signals
+        }
 
     def run_cycle(self) -> None:
         for pointer in poll_pointers(self._settings.catalog_uri, self._settings.catalog_name):
             table = self._catalog.load_table((pointer.namespace, pointer.table))
-            self._data_files.labels(pointer.namespace, pointer.table).set(data_file_count(table))
+            metadata = read_metadata(table, self._signals)
+            for signal in self._signals:
+                self._gauges[signal.name].labels(pointer.namespace, pointer.table).set(
+                    signal.compute(metadata)
+                )
 
     def metrics_text(self) -> str:
         return generate_latest(self._registry).decode()
