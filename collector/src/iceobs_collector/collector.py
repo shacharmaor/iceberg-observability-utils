@@ -15,7 +15,9 @@ from iceobs_collector.signals import REGISTRY, read_metadata
 class Collector:
     def __init__(self, settings: Settings, catalog: SqlCatalog | None = None) -> None:
         self._settings = settings
-        self.catalog = catalog or SqlCatalog(settings.catalog_name, uri=settings.catalog_uri)
+        self.catalog = catalog or SqlCatalog(
+            settings.catalog_name, uri=settings.catalog_uri, **settings.catalog_properties()
+        )
         self._last_seen: dict[tuple[str, str], str] = {}
         self._registry = CollectorRegistry()
         self._signals = [s for s in REGISTRY.values() if s.name not in settings.disabled_signals]

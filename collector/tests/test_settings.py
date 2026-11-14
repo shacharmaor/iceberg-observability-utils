@@ -46,3 +46,27 @@ def test_missing_required_value_fails_with_clear_error():
 def test_invalid_numbers_fail_naming_the_variable(name, bad):
     with pytest.raises(SettingsError, match=name):
         Settings.from_env({"ICEOBS_CATALOG_URI": "sqlite:///c.db", name: bad})
+
+
+def test_object_store_settings_become_catalog_properties():
+    settings = Settings.from_env(
+        {
+            "ICEOBS_CATALOG_URI": "sqlite:///c.db",
+            "ICEOBS_S3_ENDPOINT": "http://minio:9000",
+            "ICEOBS_S3_REGION": "us-east-1",
+            "ICEOBS_S3_ACCESS_KEY_ID": "key",
+            "ICEOBS_S3_SECRET_ACCESS_KEY": "secret",
+        }
+    )
+
+    assert settings.catalog_properties() == {
+        "s3.endpoint": "http://minio:9000",
+        "s3.region": "us-east-1",
+        "s3.access-key-id": "key",
+        "s3.secret-access-key": "secret",
+        "s3.force-virtual-addressing": "false",
+    }
+
+
+def test_no_object_store_settings_means_no_catalog_properties():
+    assert Settings.from_env({"ICEOBS_CATALOG_URI": "sqlite:///c.db"}).catalog_properties() == {}

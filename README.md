@@ -16,6 +16,23 @@ make lint test          # both Python projects, offline
 cd web-ui && npm install && npm run build
 ```
 
+## Local dev stack (tickets 17, 19)
+
+Needs Docker with Compose. One command builds the three images, starts PostgreSQL (JDBC Catalog),
+MinIO, Prometheus, Collector, UI Backend and Web UI, and seeds four sample Tables:
+
+```sh
+make dev-up      # then open http://localhost:8081 (Web UI); Prometheus :9090, MinIO console :9001
+make dev-down    # stop and delete volumes
+```
+
+Seeded Tables: `sales.orders` (3 data files), `sales.returns` (12), `ops.events` (30),
+`ops.heartbeats` (1). The dev stack lowers the UI Backend's thresholds (warn 10, critical 25) so
+the Overview shows a warn and a critical Finding. Inside the air gap, set `IMAGE_REGISTRY`
+(with trailing slash), `PYTHON_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `PIP_INDEX_URL` and
+`NPM_REGISTRY` for `make dev-up`. The images and compose file were written without a Docker
+daemon available, so they have not been run yet.
+
 Run by hand: `python -m iceobs_collector` (needs `ICEOBS_CATALOG_URI`) and
 `python -m iceobs_ui_backend` (needs `ICEOBS_PROMETHEUS_URL`); `npm run dev` proxies `/api` to
 `localhost:8000`.

@@ -1,0 +1,79 @@
+# Local dev stack: PostgreSQL (JDBC Catalog), MinIO (S3), Prometheus, plus the three workloads.
+# Images come from IMAGE_REGISTRY (include the trailing slash, e.g. "registry.internal/"), so inside
+# the air gap nothing is pulled from the internet. Build our own images with `make build` first.
+name: iceobs-dev
+
+x-catalog-env: &catalog-env
+  ICEOBS_CATALOG_URI: postgresql://iceberg:iceberg@postgres:5432/iceberg
+  ICEOBS_S3_ENDPOINT: http://minio:9000
+  ICEOBS_S3_REGION: us-east-1
+  ICEOBS_S3_ACCESS_KEY_ID: minioadmin
+  ICEOBS_S3_SECRET_ACCESS_KEY: minioadmin
+
+services:
+  postgres:
+    image: ${IMAGE_REGISTRY:-}postgres:16
+    environment:
+      POSTGRES_USER: iceberg
+      POSTGRES_PASSWORD: iceberg
+      POSTGRES_DB: iceberg
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iceberg"]
+      interval: 3s
+      retries: 20
+
+  minio:
+    image: ${IMAGE_REGISTRY:-}minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9001:9001"]
+
+  minio-init:
+    image: ${IMAGE_REGISTRY:-}minio/mc:latest
+    depends_on: [minio]
+    entrypoint: >
+      sh -c "until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done &&
+             mc mb --ignore-existing local/warehouse"
+
+  seed:
+    image: ${IMAGE_REGISTRY:-}iceobs-collector:dev
+    entrypoint: ["python", "/app/tools/seed_dev_stack.py"]
+    environment: *catalog-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+
+  collector:
+    image: ${IMAGE_REGISTRY:-}iceobs-collector:dev
+    environment:
+      <<: *catalog-env
+      ICEOBS_POLL_INTERVAL_SECONDS: "10"
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    restart: unless-stopped
+    ports: ["8080:8080"]
+
+  prometheus:
+    image: ${IMAGE_REGISTRY:-}prom/prometheus:latest
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    depends_on: [collector]
+
+  ui-backend:
+    image: ${IMAGE_REGISTRY:-}iceobs-ui-backend:dev
+    environment:
+      ICEOBS_PROMETHEUS_URL: http://prometheus:9090
+      # Demo thresholds so the seeded Tables produce Findings (orders ok, returns warn, events critical).
+      ICEOBS_DATA_FILES_WARN: "10"
+      ICEOBS_DATA_FILES_CRITICAL: "25"
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+  web-ui:
+    image: ${IMAGE_REGISTRY:-}iceobs-web-ui:dev
+    environment:
+      ICEOBS_UI_BACKEND_URL: http://ui-backend:8000
+    depends_on: [ui-backend]
+    ports: ["8081:8080"]

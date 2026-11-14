@@ -36,6 +36,10 @@ class Settings:
     http_port: int = DEFAULT_HTTP_PORT
     load_concurrency: int = DEFAULT_LOAD_CONCURRENCY
     disabled_signals: frozenset[str] = frozenset()
+    s3_endpoint: str | None = None
+    s3_region: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -64,4 +68,21 @@ class Settings:
                 env, "ICEOBS_LOAD_CONCURRENCY", DEFAULT_LOAD_CONCURRENCY
             ),
             disabled_signals=disabled,
+            s3_endpoint=env.get("ICEOBS_S3_ENDPOINT") or None,
+            s3_region=env.get("ICEOBS_S3_REGION") or None,
+            s3_access_key_id=env.get("ICEOBS_S3_ACCESS_KEY_ID") or None,
+            s3_secret_access_key=env.get("ICEOBS_S3_SECRET_ACCESS_KEY") or None,
         )
+
+    def catalog_properties(self) -> dict[str, str]:
+        """PyIceberg FileIO properties for S3-compatible storage (path-style addressing)."""
+        configured = {
+            "s3.endpoint": self.s3_endpoint,
+            "s3.region": self.s3_region,
+            "s3.access-key-id": self.s3_access_key_id,
+            "s3.secret-access-key": self.s3_secret_access_key,
+        }
+        properties = {key: value for key, value in configured.items() if value}
+        if properties:
+            properties["s3.force-virtual-addressing"] = "false"
+        return properties
